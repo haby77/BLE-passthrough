@@ -29,6 +29,9 @@
 #include "lib.h"
 #include "app_pt.h"
 #include "sleep.h"
+#if 	defined(CFG_JOYSTICK)
+#include "usr_button.h"
+#endif
 
 
 /**
@@ -39,15 +42,16 @@
 void pt_gpio_init(void)
 {
 	//PT_STATE1 , PT_STATE0
-	gpio_set_direction_field(PT_STATE1|PT_STATE0,(uint32_t)GPIO_OUTPUT);
+	gpio_set_direction_field(PT_STATE0,(uint32_t)GPIO_OUTPUT);
+	gpio_write_pin(PT_STATE0,GPIO_HIGH);
 
-	// PT_STATE_CHANGE
-    gpio_wakeup_config(PT_STATE_CHANGE, GPIO_WKUP_BY_LOW);
-    gpio_enable_interrupt(PT_STATE_CHANGE);
+//	// PT_STATE_CHANGE
+//    gpio_wakeup_config(PT_STATE_CHANGE, GPIO_WKUP_BY_LOW);
+//    gpio_enable_interrupt(PT_STATE_CHANGE);
 
 	// PT_TX_WAKEUP
-	gpio_wakeup_config(PT_TX_WAKEUP, GPIO_WKUP_BY_LOW);
-	gpio_enable_interrupt(PT_TX_WAKEUP);
+	gpio_wakeup_config(PT_WAKEUP, GPIO_WKUP_BY_LOW);
+	gpio_enable_interrupt(PT_WAKEUP);
     
     
     if(KE_EVENT_OK != ke_evt_callback_set(EVENT_GPIO_STCHANGE_ID, 
@@ -76,24 +80,24 @@ void pt_state_set(enum pt_st state)
 {
 	switch(state)
 	{
-		case PT_DEEPSLEEP:
-		{
-			gpio_write_pin(PT_STATE1, GPIO_LOW);
-			gpio_write_pin(PT_STATE0, GPIO_LOW);
-		}break;
-		case PT_ADV:
-		{
-			gpio_write_pin(PT_STATE1, GPIO_LOW);
-			gpio_write_pin(PT_STATE0, GPIO_HIGH);
-		}break;
+//		case PT_DEEPSLEEP:
+//		{
+//			//gpio_write_pin(PT_STATE1, GPIO_LOW);
+//			gpio_write_pin(PT_STATE0, GPIO_LOW);
+//		}break;
+//		case PT_ADV:
+//		{
+//			//gpio_write_pin(PT_STATE1, GPIO_LOW);
+//			gpio_write_pin(PT_STATE0, GPIO_HIGH);
+//		}break;
 		case PT_CONN_EMPTY:
 		{
-			gpio_write_pin(PT_STATE1, GPIO_HIGH);
+			//gpio_write_pin(PT_STATE1, GPIO_HIGH);
 			gpio_write_pin(PT_STATE0, GPIO_LOW);
 		}break;
 		case PT_CONN_FULL:
 		{
-			gpio_write_pin(PT_STATE1, GPIO_HIGH);
+			//gpio_write_pin(PT_STATE1, GPIO_HIGH);
 			gpio_write_pin(PT_STATE0, GPIO_HIGH);
 		}break;
 		
@@ -142,7 +146,7 @@ int app_pt_gpio_timer_handler(ke_msg_id_t const msgid, void const *param,
 
 void app_pt_gpio_stchange_process(void)
 {
-   if(gpio_read_pin(PT_STATE_CHANGE) == GPIO_LOW)
+   if(usr_button_env.joystick_dir == key_up)
 	{
 		switch(pt_env.pt_state)
 		{
@@ -197,7 +201,7 @@ void app_pt_gpio_stchange_process(void)
 
 void app_pt_gpio_txwakeup_process(void)
 {
-	if(gpio_read_pin(PT_TX_WAKEUP) == GPIO_LOW)
+	if(usr_button_env.joystick_dir == key_left)
 	{		
 		switch(pt_env.pt_state)
 		{

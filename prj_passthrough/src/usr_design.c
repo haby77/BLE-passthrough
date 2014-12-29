@@ -40,6 +40,9 @@
 #include "app_pt.h"
 #include "app_pt_gpio.h"
 #endif
+
+#include "usr_task.h"
+#include "led.h"
 /*
  * MACRO DEFINITIONS
  ****************************************************************************************
@@ -223,13 +226,13 @@ int app_gap_adv_intv_update_timer_handler(ke_msg_id_t const msgid, void const *p
 void usr_sleep_restore(void)
 {
 #if QN_DBG_PRINT
-    uart_init(QN_DEBUG_UART, USARTx_CLK(0), UART_115200);
+    uart_init(QN_DEBUG_UART, USARTx_CLK(0), UART_9600);
     uart_tx_enable(QN_DEBUG_UART, MASK_ENABLE);
     uart_rx_enable(QN_DEBUG_UART, MASK_ENABLE);
 #endif
 ///leo add
 #if (defined(QN_PT))	
-    uart_init(QN_HCI_UART, USARTx_CLK(0), UART_115200);
+    uart_init(QN_HCI_UART, USARTx_CLK(0), UART_9600);
     uart_tx_enable(QN_HCI_UART, MASK_ENABLE);
     uart_rx_enable(QN_HCI_UART, MASK_ENABLE);
 #endif
@@ -252,15 +255,17 @@ void gpio_interrupt_callback(enum gpio_pin pin)
 {
     switch(pin)
     {
-        case PT_STATE_CHANGE:
+//        case PT_STATE_CHANGE:
+//				{
+//            //Button 1 is used to enter adv mode.
+//            gpio_stchange_cb();
+//					
+//				}break;
+        case PT_WAKEUP:
 				{
-            //Button 1 is used to enter adv mode.
-            gpio_stchange_cb();
-					
-				}break;
-        case PT_TX_WAKEUP:
-				{
-            gpio_txwakeup_cb();
+            gpio_write_pin(LED1_PIN,GPIO_LOW);
+						usr_button1_cb();
+						//gpio_txwakeup_cb();
 					
 				}break;
 
@@ -286,6 +291,21 @@ void gpio_interrupt_callback(enum gpio_pin pin)
  */
 void usr_init(void)
 {
+	
+	 task_usr_desc_register();  
+    ke_state_set(TASK_USR, USR_DISABLE);
+	
+	if(KE_EVENT_OK != ke_evt_callback_set(EVENT_BUTTON1_PRESS_ID,
+                                            app_event_button1_press_handler))
+    {
+        ASSERT_ERR(0);
+    }
+	
+	  if(KE_EVENT_OK != ke_evt_callback_set(EVENT_ADC_KEY_SAMPLE_CMP_ID,
+                                            app_event_adc_key_sample_cmp_handler))
+    {
+        ASSERT_ERR(0);
+    }
 }
 
 /// @} USR

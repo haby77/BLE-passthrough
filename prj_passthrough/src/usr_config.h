@@ -29,6 +29,9 @@
 /// Easy API
 // #define CFG_EAPI
 
+///FireBlue Joystick button
+#define	CFG_JOYSTICK
+
 /// PASS Through
 #define CFG_PT
 //#define CFG_PT_BOTTON
@@ -53,7 +56,7 @@
 // #define CFG_NVDS_WRITE
 
 /// Test mode controll pin
-#define CFG_TEST_CTRL_PIN GPIO_P30
+//#define CFG_TEST_CTRL_PIN GPIO_P30
 
 /// ADV watchdog timer
 #if (defined(CFG_9020_B0))
@@ -80,10 +83,10 @@
 #define CFG_DEBUG_UART  QN_UART0
 
 // Using standard lib printf
-//#define CFG_STD_PRINTF
+#define CFG_STD_PRINTF
 
 /// Debug print option
-//#define CFG_DBG_PRINT
+#define CFG_DBG_PRINT
 
 /// Debug trace option
 // #define CFG_DBG_TRACE_MORE

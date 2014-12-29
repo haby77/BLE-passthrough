@@ -5,9 +5,9 @@
  *
  * @brief ADC driver for QN9020.
  *
- * Copyright (C) Quintic 2012-2013
+ * Copyright (C) Quintic 2012-2014
  *
- * $Rev: 1.0 $
+ * $Rev: 1.1 $
  *
  ****************************************************************************************
  */
@@ -39,7 +39,8 @@
 ///ADC environment parameters
 struct adc_env_tag
 {
-    enum ADC_MODE       mode;
+    enum ADC_WORK_MOD   mode;
+    enum ADC_TRIG_SRC   trig_src;
     enum ADC_CH         start_ch;  // current channel, in scan mode, as start channel
     enum ADC_CH         end_ch;
     int32_t             samples;
@@ -56,30 +57,27 @@ struct adc_env_tag
  * GLOBAL VARIABLE DEFINITIONS
  ****************************************************************************************
  */
-#define ADC_INT_REF_VOL_DEFAULT                      (1000)
 
-#if CONFIG_ADC_DEFAULT_IRQHANDLER==TRUE
 ///ADC environment variable
 static struct adc_env_tag adc_env;
-#endif
-///ADC trigger source
-static enum ADC_TRIG_SRC adc_trigger;
+
 ///ADC SCAN channel number
-static uint8_t scan_ch_num;
+static volatile uint8_t scan_ch_num;
 
-static uint16_t ADC_SCALE = ADC_INT_REF_VOL_DEFAULT;
-static uint16_t ADC_VCM = (ADC_INT_REF_VOL_DEFAULT>>1);
+static uint16_t ADC_SCALE = 1000;  // internal reference voltage is 1V.
+static uint16_t ADC_VCM = 500;     // internal reference VCM is 0.5V.
 static int16_t ADC_OFFSET = 0;
-
+static uint8_t ADC_VCM_flag = 0;
+static uint16_t ADC_VREF = 0;
 
 /*
  * LOCAL FUNCTION DEFINITIONS
  ****************************************************************************************
  */
 //{ 64bit function use the standard compiler helper function library in Run-time ABI for the ARM 
-#ifdef __ICCARM__ // for IAR compiler
+#ifdef __ICCARM__   // for IAR compiler
 #define __QAEABI __nounwind __interwork __softfp __aapcs_core
-#else // for KEIL compiler
+#else               // for KEIL compiler
 #define __QAEABI
 #endif
 
@@ -87,6 +85,9 @@ static int16_t ADC_OFFSET = 0;
 extern __QAEABI int64_t __aeabi_lmul(int64_t x, int64_t y);
 //} end
 
+static void __adc_cofig(const adc_init_configuration *S);
+static void __adc_calibrate(const adc_init_configuration *S);
+static void __adc_offset_get(void);
 
 /*
  * EXPORTED FUNCTION DEFINITIONS
@@ -128,8 +129,8 @@ void ADC_IRQHandler(void)
                 }
                 else {
 
-                    // single mode enable, software trigger
-                    if ((adc_trigger == ADC_TRIG_SOFT) && ((adc_env.mode == SINGLE_SCAN_MOD)||(adc_env.mode == SINGLE_MOD))) {
+                    // burst mode enable, software trigger
+                    if ((adc_env.trig_src == ADC_TRIG_SOFT) && ((adc_env.mode == BURST_SCAN_MOD)||(adc_env.mode == BURST_MOD))) {
 
                         scan_ch_num--;
                         if (scan_ch_num == 0) {
@@ -139,7 +140,7 @@ void ADC_IRQHandler(void)
                             adc_adc_SetADC0WithMask(QN_ADC, ADC_MASK_SFT_START, MASK_ENABLE);
 
                             // restore scan_ch_num
-                            if (adc_env.mode == SINGLE_SCAN_MOD) {
+                            if (adc_env.mode == BURST_SCAN_MOD) {
                                 scan_ch_num = adc_env.end_ch - adc_env.start_ch + 1;
                             }
                             else {
@@ -195,53 +196,211 @@ void adc_clean_fifo(void)
 /**
  ****************************************************************************************
  * @brief   Initialize ADC
- * @param[in]    work_clk       work_clk = (ADC_SOURCE_CLK / (2<<ADC_DIV)), ADC_DIV = 0 - 15,
- *  ADC_SOURCE_CLK is 32k or system clock(4 types, decided by CLK_MUX), the max work_clk = 1MHz
- * @param[in]    trig_src       ADC trigger source
- * @param[in]    ref_vol        ADC reference voltage
+ * @param[in]    in_mod     ADC input mode
+ * @param[in]    work_clk   ADC work_clk = (ADC_SOURCE_CLK / (2<<ADC_DIV)), ADC_DIV = 0 ~ 15,
+ *                          ADC_SOURCE_CLK is 32k or system clock(4 types, decided by CLK_MUX), 
+ *                          the max work_clk = 1MHz.
+ * @param[in]    ref_vol    ADC reference voltage
+ * @param[in]    resolution ADC resolution 
  * @description
- *  This function is used to set ADC module work clock, resolution, trigger source, reference
- *  voltage and interrupt, ADC buffer gain default set to bypass.
+ *  This function is used to set ADC input mode, work clock, reference voltage, resolution, 
+ *  and interrupt.
  *
  *****************************************************************************************
  */
-void adc_init(enum ADC_WORK_CLK work_clk, enum ADC_TRIG_SRC trig_src, enum ADC_REF ref_vol)
+void adc_init(enum ADC_IN_MOD in_mod, enum ADC_WORK_CLK work_clk, enum ADC_REF ref_vol, enum ADC_RESOLUTION resolution)
 {
-    uint32_t reg;
-    uint32_t mask;
-
 #if CONFIG_ADC_DEFAULT_IRQHANDLER==TRUE
-    adc_env.mode = SINGLE_MOD;
+    adc_env.mode = BURST_MOD;
     adc_env.samples = 0;
     adc_env.bufptr = NULL;
 #if ADC_CALLBACK_EN==TRUE
     adc_env.callback = NULL;
 #endif
 #endif
-    adc_trigger = trig_src;
 
     // enable ADC module clock
     adc_clock_on();
     // power on ADC module
     adc_power_on();
     // delay for power on
-    delay(300);
+    delay(30);
+    
     // reset adc register
     adc_reset();
+
+    adc_init_configuration adc_cfg;
+    adc_cfg.work_clk = work_clk;
+    adc_cfg.ref_vol = ref_vol;
+    adc_cfg.resolution = resolution;
+    
+    switch (in_mod) {
+    case ADC_DIFF_WITH_BUF_DRV:
+        adc_cfg.buf_in_p = ADC_BUFIN_CHANNEL;
+        adc_cfg.buf_in_n = ADC_BUFIN_CHANNEL;
+        adc_cfg.gain = ADC_BUF_GAIN_BYPASS;
+        break;
+    
+    case ADC_DIFF_WITHOUT_BUF_DRV:
+        adc_cfg.buf_in_p = ADC_BUFIN_CHANNEL;
+        adc_cfg.buf_in_n = ADC_BUFIN_CHANNEL;
+        adc_cfg.gain = ADC_BUF_BYPASS;
+        break;
+    
+    case ADC_SINGLE_WITH_BUF_DRV:
+        adc_cfg.buf_in_p = ADC_BUFIN_CHANNEL;
+        adc_cfg.buf_in_n = ADC_BUFIN_VCM;
+        adc_cfg.gain = ADC_BUF_GAIN_BYPASS;
+        break;
+    
+    case ADC_SINGLE_WITHOUT_BUF_DRV:
+        adc_cfg.buf_in_p = ADC_BUFIN_CHANNEL;
+        adc_cfg.buf_in_n = ADC_BUFIN_GND;
+        adc_cfg.gain = ADC_BUF_BYPASS;
+        break;
+
+    default:
+        break;
+    }
+
+    __adc_cofig(&adc_cfg);
+    __adc_calibrate(&adc_cfg);
+
+}
+
+/**
+ ****************************************************************************************
+ * @brief  Read ADC conversion result
+ * @param[in]    S          ADC read configuration, contains work mode, trigger source, start/end channel
+ * @param[in]    buf        ADC result buffer
+ * @param[in]    samples    Sample number
+ * @param[in]    callback   callback after all the samples conversion finish
+ * @description
+ *  This function is used to read ADC specified channel conversion result.
+ * @note
+ *  When use scaning mode, only can select first 6 channel (AIN0,AIN1,AIN2,AIN3,AIN01,AIN23)
+ *****************************************************************************************
+ */
+void adc_read(const adc_read_configuration *S, int16_t *buf, uint32_t samples, void (*callback)(void))
+{
+    uint32_t reg;
+    uint32_t mask;
+
+    adc_env.mode = S->mode;
+    adc_env.trig_src = S->trig_src;
+    adc_env.start_ch = S->start_ch;
+    adc_env.end_ch = S->end_ch;
+    adc_env.bufptr = buf;
+    adc_env.samples = samples;
+    adc_env.callback = callback;
+    
+
+    // Busrt scan mode, need read all of the channel after once trigger
+    if (S->mode == BURST_SCAN_MOD) {
+        scan_ch_num = S->end_ch - S->start_ch + 1;
+    }
+    else {
+        scan_ch_num = 1;
+    }
+
+#if (CONFIG_ADC_ENABLE_INTERRUPT==FALSE) && (ADC_DMA_EN==TRUE)
+    dma_init();
+    // samples*2 <= 0x7FF
+    dma_rx(DMA_TRANS_HALF_WORD, DMA_ADC, (uint32_t)buf, samples*2, callback);
+#endif
+
+    mask = ADC_MASK_SCAN_CH_START
+         | ADC_MASK_SCAN_CH_END
+         | ADC_MASK_SCAN_INTV
+         | ADC_MASK_SCAN_EN
+         | ADC_MASK_SINGLE_EN
+         | ADC_MASK_START_SEL
+         | ADC_MASK_SFT_START
+         | ADC_MASK_POW_UP_DLY
+         | ADC_MASK_POW_DN_CTRL
+         | ADC_MASK_ADC_EN;
+
+    reg = (S->start_ch << ADC_POS_SCAN_CH_START)    // set adc channel, or set scan start channel
+        | (S->end_ch << ADC_POS_SCAN_CH_END)        // set scan end channel
+        | (0x03 << ADC_POS_SCAN_INTV)               // should not be set to 0 at burst mode
+        | (S->trig_src << ADC_POS_START_SEL)        // select ADC trigger source
+        | (0x09 << ADC_POS_POW_UP_DLY)              // power up delay
+        | ADC_MASK_POW_DN_CTRL                      // enable power down control by hardware, only work in burst mode
+        | ADC_MASK_ADC_EN;                          // enable ADC
+
+    if ((S->mode == BURST_SCAN_MOD) || (S->mode == BURST_MOD)) {    // default is continue
+        reg |= ADC_MASK_SINGLE_EN;                                  // burst mode enable
+    }
+    if ((S->mode == BURST_SCAN_MOD) || (S->mode == CONTINUE_SCAN_MOD)) {    // default is not scan
+        reg |= ADC_MASK_SCAN_EN;                                            // scan mode enable
+    }
+
+    adc_adc_SetADC0WithMask(QN_ADC, mask, reg);
+    if (adc_env.trig_src == ADC_TRIG_SOFT) {
+        // SFT_START 0->1 trigger ADC conversion
+        adc_adc_SetADC0WithMask(QN_ADC, ADC_MASK_SFT_START, MASK_ENABLE);
+    }
+
+#if CONFIG_ADC_ENABLE_INTERRUPT==TRUE
+    dev_prevent_sleep(PM_MASK_ADC_ACTIVE_BIT);
+#elif (CONFIG_ADC_ENABLE_INTERRUPT==FALSE) && (ADC_DMA_EN==FALSE)
+
+    // polling
+    while(samples > 0)
+    {
+        for (int i = 0; i < scan_ch_num; i++) {
+            while(!(adc_adc_GetSR(QN_ADC) & ADC_MASK_DAT_RDY_IF));
+            *buf++ = adc_adc_GetDATA(QN_ADC);
+            samples--;
+        }
+
+        // Burst mode enable, software trigger
+        if ( (samples) && (adc_env.trig_src == ADC_TRIG_SOFT) && ((S->mode == BURST_SCAN_MOD)||(S->mode == BURST_MOD))) {
+            // SFT_START 0->1 trigger ADC conversion
+            adc_adc_SetADC0WithMask(QN_ADC, ADC_MASK_SFT_START, MASK_DISABLE);
+            adc_adc_SetADC0WithMask(QN_ADC, ADC_MASK_SFT_START, MASK_ENABLE);
+        }
+    }
+
+    // disable ADC
+    adc_enable(MASK_DISABLE);
+    adc_clean_fifo();
+
+#if ADC_CALLBACK_EN==TRUE
+    if (callback != NULL)
+    {
+        callback();
+    }
+#endif
+#endif
+}
+
+/**
+ ****************************************************************************************
+ * @brief   ADC configuration
+ * @param[in]    S  ADC initial configuration, contains work clock, reference voltage selection, resolution and input buffer setting
+ * @description
+ *  This function is used to configure the ADC.
+ *
+ *****************************************************************************************
+ */
+static void __adc_cofig(const adc_init_configuration *S)
+{
+    uint32_t reg;
+    uint32_t mask;
 
     // set work clock
     mask = SYSCON_MASK_ADC_CLK_SEL
          | SYSCON_MASK_ADC_DIV_BYPASS
          | SYSCON_MASK_ADC_DIV;
-    reg =  work_clk;
-    syscon_SetADCCRWithMask(QN_SYSCON, mask, reg);
-
-
+    reg =  S->work_clk;
+    syscon_SetADCCRWithMask(QN_SYSCON, mask, reg);    
+    
+    
     // adc int
     mask = ADC_MASK_INT_MASK        // mask ADC int
          | ADC_MASK_FIFO_OF_IE      // mask ADC fifo overflow int
          | ADC_MASK_DAT_RDY_IE      // mask ADC data ready int
-         | ADC_MASK_BUF_PD          // SAR ADC buffer is power down
          | ADC_MASK_VREF_SEL        // Select referecnce voltage
          | ADC_MASK_INBUF_BP        // Bypass SAR ADC input buffer
          | ADC_MASK_BUF_GAIN_BP     // Bypass SAR ADC input buffer gain stage
@@ -249,11 +408,11 @@ void adc_init(enum ADC_WORK_CLK work_clk, enum ADC_TRIG_SRC trig_src, enum ADC_R
          | ADC_MASK_BUF_IN_N        // SAR ADC buffer input selection  AN1/3
          | ADC_MASK_RES_SEL         // SAR ADC resolution
          ;
-    reg = (ref_vol << ADC_POS_VREF_SEL)
-        | ADC_BUFF_CTRL_CFG
-        | (ADC_BUFF_IN_P_CFG << ADC_POS_BUF_IN_P)    // ADC channel
-        | (ADC_BUFF_IN_N_CFG << ADC_POS_BUF_IN_N)    // VCM
-        | (CFG_ADC_RESOLUTION << ADC_POS_RES_SEL)    // 12bit
+    reg = (S->ref_vol << ADC_POS_VREF_SEL)
+        | (S->gain << ADC_POS_BUF_GAIN)
+        | (S->buf_in_p << ADC_POS_BUF_IN_P)
+        | (S->buf_in_n << ADC_POS_BUF_IN_N)
+        | (S->resolution << ADC_POS_RES_SEL)
         ;
 
 #if CONFIG_ADC_ENABLE_INTERRUPT==TRUE
@@ -264,18 +423,32 @@ void adc_init(enum ADC_WORK_CLK work_clk, enum ADC_TRIG_SRC trig_src, enum ADC_R
 #endif
 
     adc_adc_SetADC1WithMask(QN_ADC, mask, reg);
+}
 
-    // read from NVDS
+/**
+ ****************************************************************************************
+ * @brief   ADC calibration
+ * @param[in]    S  ADC initial configuration, contains work clock, reference voltage selection, resolution and input buffer setting
+ * @description
+ *  This function is used to get the ADC calibration result
+ *
+ *****************************************************************************************
+ */
+static void __adc_calibrate(const adc_init_configuration *S)
+{
+    // read calibration result from NVDS
     uint16_t len = 4;
     uint32_t data = 0;
-    ADC_SCALE = ADC_INT_REF_VOL_DEFAULT;
-    if (NVDS_OK == nvds_get(NVDS_TAG_ADC_INT_REF_SCALE, &len, (uint8_t *)&data)) {
-        if ((data>900) && (data<1100)) {
-            ADC_SCALE = data;
-        }
-    }
 
-    if (ref_vol == ADC_INT_REF) {
+    if (ADC_INT_REF == S->ref_vol) {
+        
+        if (NVDS_OK == nvds_get(NVDS_TAG_ADC_INT_REF_SCALE, &len, (uint8_t *)&data)) {
+            if ((data>900) && (data<1100)) {
+                ADC_SCALE = data;
+            }
+        }
+        
+        ADC_VREF = ADC_SCALE;
         ADC_VCM = ADC_SCALE>>1;
         if (NVDS_OK == nvds_get(NVDS_TAG_ADC_INT_REF_VCM, &len, (uint8_t *)&data)) {
             if ((data>450) && (data<550)) {
@@ -284,8 +457,51 @@ void adc_init(enum ADC_WORK_CLK work_clk, enum ADC_TRIG_SRC trig_src, enum ADC_R
         }
     }
     else {
-        ADC_VCM = ADC_EXT_REF_VOL>>1;
+        ADC_VREF = CFG_ADC_EXT_REF_VOL;
+        ADC_VCM = CFG_ADC_EXT_REF_VOL>>1;
     }
+
+    if (ADC_BUFIN_VCM == S->buf_in_n) {
+        ADC_VCM_flag = 1;
+    }
+    else {
+        ADC_VCM_flag = 0;
+    }
+    __adc_offset_get();
+}
+
+
+static volatile uint8_t adc_offset_get_done = 0;
+static void adc_offset_get_cb(void)
+{
+    adc_offset_get_done = 1;
+}
+
+/**
+ ****************************************************************************************
+ * @brief   Get ADC offset for conversion result correction
+ * @description
+ *  This function is used to get ADC offset for conversion result correction, and should be called after 
+ *  ADC initialization and buffer gain settings.
+ *
+ *****************************************************************************************
+ */
+static void __adc_offset_get(void)
+{
+    uint32_t buff_in_restore = adc_adc_GetADC1(QN_ADC);
+    adc_adc_SetADC1WithMask(QN_ADC, ADC_MASK_BUF_IN_P|ADC_MASK_BUF_IN_N, (ADC_BUFIN_VCM << ADC_POS_BUF_IN_P)|(ADC_BUFIN_VCM << ADC_POS_BUF_IN_N));
+
+    adc_offset_get_done = 0;
+    adc_read_configuration read_cfg;
+    read_cfg.trig_src = ADC_TRIG_SOFT;
+    read_cfg.mode = BURST_MOD;
+    read_cfg.start_ch = AIN01;
+    read_cfg.end_ch = AIN01;    
+    adc_read(&read_cfg, &ADC_OFFSET, 1, adc_offset_get_cb);
+    while (!adc_offset_get_done);
+    
+    // restore buffer input source
+    adc_adc_SetADC1WithMask(QN_ADC, ADC_MASK_BUF_IN_P|ADC_MASK_BUF_IN_N, buff_in_restore);
 }
 
 /**
@@ -310,6 +526,13 @@ void adc_buf_in_set(enum BUFF_IN_TYPE buf_in_p, enum BUFF_IN_TYPE buf_in_n)
         ;
 
     adc_adc_SetADC1WithMask(QN_ADC, mask, reg);
+
+    if (ADC_BUFIN_VCM == buf_in_n) {
+        ADC_VCM_flag = 1;
+    }
+    else {
+        ADC_VCM_flag = 0;
+    }
 }
 
 /**
@@ -393,185 +616,26 @@ void adc_decimation_enable(enum DECIMATION_RATE rate, uint32_t able)
 
 /**
  ****************************************************************************************
- * @brief  Read ADC channel
- * @param[in]    mode         ADC mode: single, continue, single scan, continue scan
- * @param[in]    start_ch     ADC current channel, or start channel in scan mode
- * @param[in]    end_ch       ADC end channel in scan mode
- * @param[in]    buf          ADC result
- * @param[in]    samples      sample number
- * @param[in]    callback     callback after convert
+ * @brief   ADC result(mv)
+ * @param[in]   adc_data        ADC data
+ * @return voltage value(mv)
  * @description
- *  This function is used to read specified ADC channel.
- * @note
- *  When use scaning mode, only can select first 6 channel (AIN0,AIN1,AIN2,AIN3,AIN01,AIN23)
- *****************************************************************************************
- */
-void adc_read(enum ADC_MODE mode, enum ADC_CH start_ch, enum ADC_CH end_ch, int16_t *buf, uint32_t samples, void (*callback)(void))
-{
-    uint32_t reg;
-    uint32_t mask;
-#if (CONFIG_ADC_ENABLE_INTERRUPT==FALSE) && (ADC_DMA_EN==FALSE)
-    uint32_t i;
-#endif
-
-#if CONFIG_ADC_DEFAULT_IRQHANDLER==TRUE
-
-    adc_env.mode = mode;
-    adc_env.start_ch = start_ch;
-    adc_env.end_ch = end_ch;
-    adc_env.bufptr = buf;
-    adc_env.samples = samples;
-    adc_env.callback = callback;
-
-#endif
-
-    // single scan mode, need read all of the channel after once trigger
-    if (mode == SINGLE_SCAN_MOD) {
-        scan_ch_num = end_ch - start_ch + 1;
-    }
-    else {
-        scan_ch_num = 1;
-    }
-
-#if (CONFIG_ADC_ENABLE_INTERRUPT==FALSE) && (ADC_DMA_EN==TRUE)
-    dma_init();
-    // samples*2 <= 0x7FF
-    dma_rx(DMA_TRANS_HALF_WORD, DMA_ADC, (uint32_t)buf, samples*2, callback);
-#endif
-
-    mask = ADC_MASK_SCAN_CH_START
-         | ADC_MASK_SCAN_CH_END
-         | ADC_MASK_SCAN_INTV
-         | ADC_MASK_SCAN_EN
-         | ADC_MASK_SINGLE_EN
-         | ADC_MASK_START_SEL
-         | ADC_MASK_SFT_START
-         | ADC_MASK_POW_UP_DLY
-         | ADC_MASK_POW_DN_CTRL
-         | ADC_MASK_ADC_EN;                    // enable ADC
-
-    reg = (start_ch << ADC_POS_SCAN_CH_START)  // set adc channel, or set scan start channel
-        | (end_ch << ADC_POS_SCAN_CH_END)      // set scan end channel
-        | (0x03 << ADC_POS_SCAN_INTV)          // should not be set to 0 at single mode
-        | (adc_trigger << ADC_POS_START_SEL)   // select ADC trigger source
-        | (0x9 << ADC_POS_POW_UP_DLY)
-        | ADC_MASK_POW_DN_CTRL                 // enable power down control by hardware, only work in single mode
-        | ADC_MASK_ADC_EN;                     // enable ADC
-
-    if ((mode == SINGLE_SCAN_MOD) || (mode == SINGLE_MOD)) { // default is continue
-        reg |= ADC_MASK_SINGLE_EN;
-    }
-    if ((mode == SINGLE_SCAN_MOD) || (mode == CONTINUE_SCAN_MOD)) { // default is not scan
-        reg |= ADC_MASK_SCAN_EN;
-    }
-
-    adc_adc_SetADC0WithMask(QN_ADC, mask, reg);
-
-    if (adc_trigger == ADC_TRIG_SOFT) {
-        // SFT_START 0->1 trigger ADC conversion
-        adc_adc_SetADC0WithMask(QN_ADC, ADC_MASK_SFT_START, MASK_ENABLE);
-    }
-
-#if CONFIG_ADC_ENABLE_INTERRUPT==TRUE
-    dev_prevent_sleep(PM_MASK_ADC_ACTIVE_BIT);
-#elif (CONFIG_ADC_ENABLE_INTERRUPT==FALSE) && (ADC_DMA_EN==FALSE)
-
-    // polling
-    while(samples > 0)
-    {
-        for (i = 0; i < scan_ch_num; i++) {
-            while(!(adc_adc_GetSR(QN_ADC) & ADC_MASK_DAT_RDY_IF));
-            *buf++ = adc_adc_GetDATA(QN_ADC);
-            samples--;
-        }
-
-        // single mode enable, software trigger
-        if ((adc_trigger == ADC_TRIG_SOFT) && ((mode == SINGLE_SCAN_MOD)||(mode == SINGLE_MOD))) {
-            // SFT_START 0->1 trigger ADC conversion
-            adc_adc_SetADC0WithMask(QN_ADC, ADC_MASK_SFT_START, MASK_DISABLE);
-            adc_adc_SetADC0WithMask(QN_ADC, ADC_MASK_SFT_START, MASK_ENABLE);
-        }
-    }
-
-    // disable ADC
-    adc_enable(MASK_DISABLE);
-
-#if ADC_CALLBACK_EN==TRUE
-    if (callback != NULL)
-    {
-        callback();
-    }
-#endif
-
-#endif
-}
-
-static volatile uint8_t adc_offset_get_done = 0;
-static void adc_offset_get_cb(void)
-{
-    adc_offset_get_done = 1;
-}
-
-/**
- ****************************************************************************************
- * @brief   Get ADC offset for conversion result correction
- * @description
- *  This function is used to get ADC offset for conversion result correction, and should be called after 
- *  ADC initialization and buffer gain settings.
+ *  This function is used to calculate ADC voltage value
  *
  *****************************************************************************************
  */
-void adc_offset_get(void)
+int16_t ADC_RESULT_mV(int16_t adc_data)
 {
-    enum ADC_TRIG_SRC adc_trigger_restore = adc_trigger;
-    uint32_t buff_in_restore = adc_adc_GetADC1(QN_ADC);
-
-    adc_trigger = ADC_TRIG_SOFT;
-    adc_buf_in_set(ADC_BUFIN_VCM, ADC_BUFIN_VCM);
-
-    adc_offset_get_done = 0;
-    adc_read(SINGLE_MOD, AIN01, AIN01, &ADC_OFFSET, 1, adc_offset_get_cb);
-    while (!adc_offset_get_done);
+    int16_t result;
     
-    // restore trigger source
-    adc_trigger = adc_trigger_restore;
-    // restore buffer input source
-    adc_adc_SetADC1WithMask(QN_ADC, ADC_MASK_BUF_IN_P|ADC_MASK_BUF_IN_N, buff_in_restore);
-}
+    result = __aeabi_lmul(adc_data - ADC_OFFSET, ADC_VREF) >> 11;
+    if (ADC_VCM_flag) {
+        result += ADC_VCM;
+    }
 
-/**
- ****************************************************************************************
- * @brief   ADC single mode result(mv)
- * @param[in]   adc_data        ADC data
- * @return voltage value(mv)
- * @description
- *  This function is used to calculate ADC single mode voltage value
- *
- *****************************************************************************************
- */
-int16_t ADC_SING_RESULT_mV(int16_t adc_data)
-{
-    int16_t result;
-    result = (__aeabi_lmul(adc_data - ADC_OFFSET, CFG_ADC_REF_VOL) >> 11) + ADC_VCM;
     return result;
 }
 
-/**
- ****************************************************************************************
- * @brief   ADC differential mode result(mv)
- * @param[in]   adc_data        ADC data
- * @return voltage value(mv)
- * @description
- *  This function is used to calculate ADC differential mode voltage value
- *
- *****************************************************************************************
- */
-int16_t ADC_DIFF_RESULT_mV(int16_t adc_data)
-{
-    int16_t result;
-    result = __aeabi_lmul(adc_data - ADC_OFFSET, CFG_ADC_REF_VOL) >> 11;
-    return result;
-}
 
 #endif /* CONFIG_ENABLE_DRIVER_ADC==TRUE */
 /// @} ADC

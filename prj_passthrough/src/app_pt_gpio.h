@@ -22,9 +22,9 @@
  ****************************************************************************************
  */
 //#define PT_STATE1				(GPIO_P23)   
-//#define PT_STATE0				(GPIO_P24)
-#define PT_STATE1				(GPIO_P05)   
-#define PT_STATE0				(GPIO_P04)
+#define PT_STATE0				(GPIO_P26)
+//#define PT_STATE1				(GPIO_P05)   
+//#define PT_STATE0				(GPIO_P04)
 
 /*        PT_STATE1           PT_STATE0             STATE 
 
@@ -36,12 +36,12 @@
 
 //#define PT_STATE_CHANGE (GPIO_P03)		//This pin is used to change the ble state.
 //#define PT_TX_WAKEUP	(GPIO_P12)		  	//This pin is used to wakeup MCU to sent data.
-#define PT_STATE_CHANGE (GPIO_P14)			//This pin is used to change the ble state.
-#define PT_TX_WAKEUP	(GPIO_P15)		  	//This pin is used to wakeup MCU to sent data.
+//#define PT_STATE_CHANGE (GPIO_P14)			//This pin is used to change the ble state.
+#define PT_WAKEUP	(GPIO_P03)		  	//This pin is used to wakeup MCU to sent data.
   
 
-#define EVENT_GPIO_STCHANGE_ID     0
-#define EVENT_GPIO_TXWAKEUP_ID     1
+#define EVENT_GPIO_STCHANGE_ID     7
+#define EVENT_GPIO_TXWAKEUP_ID     8
 
 
 

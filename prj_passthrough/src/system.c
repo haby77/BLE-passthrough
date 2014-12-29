@@ -47,8 +47,13 @@ static void SystemIOCfg(void)
                              | P06_SW_DAT_PIN_CTRL
                              | P07_SW_CLK_PIN_CTRL
 
+#if defined(CFG_DEBUG_UART)
+														 | P10_UART1_RXD_PIN_CTRL
+														 | P11_UART1_TXD_PIN_CTRL
+#else
                              | P10_GPIO_8_PIN_CTRL
                              | P11_GPIO_9_PIN_CTRL
+#endif
                              | P12_GPIO_10_PIN_CTRL
                              | P13_GPIO_11_PIN_CTRL
                              | P14_GPIO_12_PIN_CTRL
@@ -65,7 +70,11 @@ static void SystemIOCfg(void)
                              | P26_GPIO_22_PIN_CTRL
                              | P27_GPIO_23_PIN_CTRL
 
+#if	!defined(CFG_JOYSTICK)
                              | P30_GPIO_24_PIN_CTRL
+#else										
+														 | P30_AIN0_PIN_CTRL
+#endif
                              | P31_GPIO_25_PIN_CTRL
                              | P32_GPIO_26_PIN_CTRL
                              | P33_GPIO_27_PIN_CTRL
@@ -142,6 +151,8 @@ void SystemInit(void)
 
     // GPIO initialization for led, button & test control pin.
     gpio_init(gpio_interrupt_callback);
+		
+		//pt_gpio_init();
 
     // Test controll pin is input to check work mode
 #if (defined(QN_TEST_CTRL_PIN))
@@ -155,7 +166,7 @@ void SystemInit(void)
 #endif
 
 #if (defined(QN_PT))
-		uart_init(QN_HCI_UART, USARTx_CLK(0), UART_115200);
+		uart_init(QN_HCI_UART, USARTx_CLK(0), UART_9600);
 		uart_tx_enable(QN_HCI_UART, MASK_ENABLE);
 		uart_rx_enable(QN_HCI_UART, MASK_ENABLE);
 		pt_gpio_init();
@@ -170,7 +181,7 @@ void SystemInit(void)
 #endif
 			
 #if (QN_DBG_PRINT)
-    uart_init(QN_DEBUG_UART, USARTx_CLK(0), UART_115200);
+    uart_init(QN_DEBUG_UART, USARTx_CLK(0), UART_9600);
     uart_tx_enable(QN_DEBUG_UART, MASK_ENABLE);
     uart_rx_enable(QN_DEBUG_UART, MASK_ENABLE);
 #endif

@@ -19,7 +19,7 @@
  * MACRO DEFINITIONS
  ****************************************************************************************
  */
-#define LED1_PIN    (GPIO_P05)
+#define LED1_PIN    (GPIO_P26)
 #define LED2_PIN    (GPIO_P04)
 #define LED3_PIN    (GPIO_P03)
 #define LED4_PIN    (GPIO_P02)

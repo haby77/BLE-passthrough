@@ -18,7 +18,7 @@
  * MACRO DEFINITIONS
  ****************************************************************************************
  */
-#define BUTTON1_PIN    (GPIO_P14)
+#define BUTTON1_PIN    (GPIO_P03)
 #define BUTTON2_PIN    (GPIO_P15)
 
 

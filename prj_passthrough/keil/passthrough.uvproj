@@ -448,6 +448,16 @@
               <FileType>1</FileType>
               <FilePath>..\src\app_pt_gpio.c</FilePath>
             </File>
+            <File>
+              <FileName>usr_button.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\src\usr_button.c</FilePath>
+            </File>
+            <File>
+              <FileName>usr_task.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\src\usr_task.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -607,6 +617,16 @@
               <FileName>serialflash.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\src\driver\serialflash.c</FilePath>
+            </File>
+            <File>
+              <FileName>adc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\src\driver\adc.c</FilePath>
+            </File>
+            <File>
+              <FileName>analog.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\src\driver\analog.c</FilePath>
             </File>
           </Files>
         </Group>

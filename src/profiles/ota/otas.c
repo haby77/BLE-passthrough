@@ -333,7 +333,7 @@ void app_otas_disable_req(uint16_t conhdl)
  */
 void app_otas_data_send(uint16_t conhdl, uint8_t index, uint8_t length, uint8_t *data)
 {
-    QPRINTF("app_otas_data_send, cur_time: %d\n", ke_time()*10);
+    //QPRINTF("app_otas_data_send, cur_time: %d\n", ke_time()*10);
     struct otas_data_send_req * msg = KE_MSG_ALLOC_DYN(OTAS_DATA_SEND_REQ, TASK_OTAS, TASK_APP,
                                                        otas_data_send_req, length);
 

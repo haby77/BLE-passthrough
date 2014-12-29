@@ -5,9 +5,9 @@
  *
  * @brief Header file of ADC for QN9020.
  *
- * Copyright (C) Quintic 2012-2013
+ * Copyright (C) Quintic 2012-2014
  *
- * $Rev: 1.0 $
+ * $Rev: 1.4 $
  *
  ****************************************************************************************
  */
@@ -32,13 +32,12 @@
  *  The main features of ADC are listed as follow:
  *    - Maximum sample rate is 1MSPS
  *    - Support 8/10/12 bits resolution for one sample data
- *    - ADC input can be selected from 12 sources which includes 10 single-end input and 2 differential input
+ *    - ADC input can be selected from 6 sources which includes 4 single-end input and 2 differential input
  *    - ADC conversion can be triggered by 4 sources: Software Start, Timer0/1 overflow and GPIO
  *    - Support selectable decimation rates, thereby corresponding improved effective resolutions
  *    - Support window compare, and generate corresponding interrupt
- *    - Support single conversion mode, continuous conversion mode
- *    - Support single burst mode, burst length is same to decimation rates
- *    - Support single scan conversion mode, continuous scan conversion mode
+ *    - Support burst conversion mode, continuous conversion mode
+ *    - Support burst scan conversion mode, continuous scan conversion mode
  *    - Support up to 1MHz/20 sampling rate
  *    - Support DMA
  *    - Support selectable reference voltage
@@ -71,52 +70,24 @@ extern "C"{
  ****************************************************************************************
  */
 
-/// ADC differential input with buffer driver, input singal should 0.2 =< VIN(V) <= VDD-0.2.
-#define ADC_DIFF_WITH_BUF_DRV                       0
-/// ADC differential input without buffer driver, input singal should 0 =< VIN(V) <= VDD, and have enough driving capability.
-#define ADC_DIFF_WITHOUT_BUF_DRV                    1
-/// ADC single-ended input with buffer driver, input singal should 0.2 =< VIN(V) <= 1.5*VREF <= VDD-0.2.
-#define ADC_SINGLE_WITH_BUF_DRV                     2
-/// ADC single-ended input without buffer driver, input singal should 0 =< VIN(V) <= 1.5*VREF <= VDD, and have enough driving capability.
-#define ADC_SINGLE_WITHOUT_BUF_DRV                  3
-
-/// Internal reference voltage: mv
-#define ADC_INT_REF_VOL                             ADC_SCALE
-/// External reference voltage: mv
-#define ADC_EXT_REF_VOL                             (1000)
-
-
-/// configure ADC input mode: differential or single-ended, with or without buffer driver
-#define CFG_ADC_IN_MOD                              ADC_SINGLE_WITHOUT_BUF_DRV
-/// configure ADC reference voltage: internal or external(mv)
-#define CFG_ADC_REF_VOL                             ADC_INT_REF_VOL
-/// configure ADC resolution
-#define CFG_ADC_RESOLUTION                          ADC_12BIT
-
-
-#if CFG_ADC_IN_MOD==ADC_DIFF_WITH_BUF_DRV
-#define ADC_BUFF_IN_P_CFG                           ADC_BUFIN_CHANNEL
-#define ADC_BUFF_IN_N_CFG                           ADC_BUFIN_CHANNEL
-#define ADC_BUFF_CTRL_CFG                           ADC_MASK_BUF_GAIN_BP
-#elif CFG_ADC_IN_MOD==ADC_DIFF_WITHOUT_BUF_DRV
-#define ADC_BUFF_IN_P_CFG                           ADC_BUFIN_CHANNEL
-#define ADC_BUFF_IN_N_CFG                           ADC_BUFIN_CHANNEL
-#define ADC_BUFF_CTRL_CFG                           (ADC_MASK_BUF_PD|ADC_MASK_INBUF_BP)
-#elif CFG_ADC_IN_MOD==ADC_SINGLE_WITH_BUF_DRV
-#define ADC_BUFF_IN_P_CFG                           ADC_BUFIN_CHANNEL
-#define ADC_BUFF_IN_N_CFG                           ADC_BUFIN_VCM
-#define ADC_BUFF_CTRL_CFG                           ADC_MASK_BUF_GAIN_BP
-#elif CFG_ADC_IN_MOD==ADC_SINGLE_WITHOUT_BUF_DRV
-#define ADC_BUFF_IN_P_CFG                           ADC_BUFIN_CHANNEL
-#define ADC_BUFF_IN_N_CFG                           ADC_BUFIN_VCM
-#define ADC_BUFF_CTRL_CFG                           ADC_MASK_INBUF_BP
-#endif
+/// External reference voltage: mV (CFG_ADC_EXT_REF_VOL = 2*EXT_REF1 or CFG_ADC_EXT_REF_VOL = EXT_REF2)
+#define CFG_ADC_EXT_REF_VOL                         (3000)
 
 
 /*
  * ENUMERATION DEFINITIONS
  *****************************************************************************************
  */
+
+/// ADC input mode
+enum ADC_IN_MOD
+{
+    ADC_DIFF_WITH_BUF_DRV = 0,      /*!< ADC differential input with buffer, input singal 0.2 =< VIN(V) <= VDD-0.2, ADC result [-2048, 2047] map to [-VREF, VREF). */
+    ADC_DIFF_WITHOUT_BUF_DRV,       /*!< ADC differential input without buffer, input singal 0 =< VIN(V) <= VDD, and should have enough driving capability, ADC result [-2048, 2047] map to [-VREF, VREF). */
+    ADC_SINGLE_WITH_BUF_DRV,        /*!< ADC single-ended input with buffer, input singal 0.2 =< VIN(V) <= 1.5*VREF <= VDD-0.2, ADC result [x, 2047] map to [0.2, 1.5*VREF). */
+    ADC_SINGLE_WITHOUT_BUF_DRV      /*!< ADC single-ended input without buffer, input singal 0 =< VIN(V) <= VREF <= VDD, and should have enough driving capability, ADC result [0, 2047] map to [0, VREF). */
+};
+
 
 /// ADC channel index
 enum ADC_CH
@@ -133,20 +104,20 @@ enum ADC_CH
 };
 
 /// ADC work mode
-enum ADC_MODE
+enum ADC_WORK_MOD
 {
-    SINGLE_MOD = 0,     /*!< Single mode,  */
+    BURST_MOD = 0,      /*!< Burst mode,  */
     CONTINUE_MOD,       /*!< Continue mode, only need trigger once */
-    SINGLE_SCAN_MOD,    /*!< Single Scan mode */
+    BURST_SCAN_MOD,     /*!< Burst Scan mode */
     CONTINUE_SCAN_MOD   /*!< Continue Scan mode */
 };
 
 /// ADC reference voltage
 enum ADC_REF
 {
-    ADC_INT_REF = 0,    /*!< Internal reference voltage, 1V */
-    ADC_EXT_REF,        /*!< External reference voltage: (VREF <= VDD-1.0V) */
-    ADC_EXT_VDD         /*!< External VDD: (VDD-1.0V<VREF<=VDD) */
+    ADC_INT_REF = 0,    /*!< Internal reference, VREF = 1.0V */
+    ADC_EXT_REF1,       /*!< External reference1(with buffer and gain=2, input PIN is P0.7): VREF = 2*EXT_REF1 (0 < EXT_REF1 < (VDD-1.0)/2). */
+    ADC_EXT_REF2        /*!< External reference2(without buffer, input PIN is P0.7): VERF = EXT_REF2 (0 < EXT_REF2 < VDD), EXT_REF2 should have driving capability. */
 };
 
 /// ADC Trigger source
@@ -246,6 +217,30 @@ enum ADC_BUFF_GAIN
     ADC_BUF_BYPASS = 8,                 /*!< Bypass ADC input buffer */
 };
 
+
+
+///Instance structure for ADC initial configuration
+typedef struct
+{
+    enum ADC_WORK_CLK work_clk;         /*!< ADC work clock */
+    enum ADC_REF ref_vol;               /*!< ADC reference voltage */
+    enum ADC_RESOLUTION resolution;     /*!< ADC resolution */
+    enum BUFF_IN_TYPE buf_in_p;         /*!< ADC input buffer P */
+    enum BUFF_IN_TYPE buf_in_n;         /*!< ADC input buffer N */
+    enum ADC_BUFF_GAIN gain;            /*!< ADC input buffer gain */
+} adc_init_configuration;
+
+
+///Instance structure for ADC read configuration
+typedef struct
+{
+    enum ADC_WORK_MOD mode;             /*!< ADC work mode */
+    enum ADC_TRIG_SRC trig_src;         /*!< ADC trigger source */
+    enum ADC_CH start_ch;               /*!< ADC start channel */
+    enum ADC_CH end_ch;                 /*!< ADC end channel */
+} adc_read_configuration;
+
+
 /*
  * FUNCTION DEFINITIONS
  ****************************************************************************************
@@ -334,6 +329,9 @@ __STATIC_INLINE void adc_power_off(void)
  */
 __STATIC_INLINE void adc_reset(void)
 {
+    // set ADC divider bypass to speed up reset process
+    syscon_SetADCCRWithMask(QN_SYSCON, SYSCON_MASK_ADC_DIV_BYPASS, SYSCON_MASK_ADC_DIV_BYPASS);
+
     // Reset ADC module
     syscon_SetADCCRWithMask(QN_SYSCON, SYSCON_MASK_ADC_DIG_RST, MASK_DISABLE);
     syscon_SetADCCRWithMask(QN_SYSCON, SYSCON_MASK_ADC_DIG_RST, MASK_ENABLE);
@@ -356,11 +354,11 @@ typedef void (*p_adc_read)(enum ADC_MODE mode, enum ADC_CH start_ch, enum ADC_CH
 
 #define adc_clean_fifo        ((p_adc_void)              _adc_clean_fifo)
 #define adc_init              ((p_adc_init)              _adc_init)
-#define adc_buf_in_set      ((p_adc_buf_in_set)      _adc_buf_in_set)
+#define adc_read              ((p_adc_read)              _adc_read)
+#define adc_buf_in_set        ((p_adc_buf_in_set)        _adc_buf_in_set)
 #define adc_buf_gain_set      ((p_adc_buf_gain_set)      _adc_buf_gain_set)
 #define adc_compare_init      ((p_adc_compare_init)      _adc_compare_init)
 #define adc_decimation_enable ((p_adc_decimation_enable) _adc_decimation_enable)
-#define adc_read              ((p_adc_read)              _adc_read)
 
 #else
 
@@ -369,15 +367,13 @@ void ADC_IRQHandler(void);
 #endif
 
 extern void adc_clean_fifo(void);
-extern void adc_init(enum ADC_WORK_CLK work_clk, enum ADC_TRIG_SRC trig_src, enum ADC_REF ref_vol);
+extern void adc_init(enum ADC_IN_MOD in_mod, enum ADC_WORK_CLK work_clk, enum ADC_REF ref_vol, enum ADC_RESOLUTION resolution);
+extern void adc_read(const adc_read_configuration *S, int16_t *buf, uint32_t samples, void (*callback)(void));
 extern void adc_buf_in_set(enum BUFF_IN_TYPE buf_in_p, enum BUFF_IN_TYPE buf_in_n);
 extern void adc_buf_gain_set(enum ADC_BUFF_GAIN gain);
 extern void adc_compare_init(enum WCMP_DATA data, int16_t high, int16_t low, void (*callback)(void));
 extern void adc_decimation_enable(enum DECIMATION_RATE rate, uint32_t able);
-extern void adc_read(enum ADC_MODE mode, enum ADC_CH start_ch, enum ADC_CH end_ch, int16_t *buf, uint32_t samples, void (*callback)(void));
-extern void adc_offset_get(void);
-extern int16_t ADC_SING_RESULT_mV(int16_t adc_data);
-extern int16_t ADC_DIFF_RESULT_mV(int16_t adc_data);
+extern int16_t ADC_RESULT_mV(int16_t adc_data);
 #endif
 
 #ifdef __cplusplus
