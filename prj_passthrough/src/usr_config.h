@@ -80,7 +80,9 @@
 #define CFG_HCI_UART    QN_UART0
 
 /// Debug information output interface
-#define CFG_DEBUG_UART  QN_UART0
+#define CFG_DEBUG_UART  QN_UART1
+
+#define	CFG_COM_UART		QN_UART0
 
 // Using standard lib printf
 #define CFG_STD_PRINTF
@@ -89,7 +91,7 @@
 #define CFG_DBG_PRINT
 
 /// Debug trace option
-// #define CFG_DBG_TRACE_MORE
+//#define CFG_DBG_TRACE_MORE  
 
 /// Debug information
 //#define CFG_DBG_INFO

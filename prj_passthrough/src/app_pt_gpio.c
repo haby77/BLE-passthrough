@@ -200,7 +200,8 @@ void app_pt_gpio_stchange_process(void)
 }
 
 void app_pt_gpio_txwakeup_process(void)
-{
+{	
+	//QPRINTF("app_pt_gpio_txwakeup_process\r\n");
 	if(usr_button_env.joystick_dir == key_left)
 	{		
 		switch(pt_env.pt_state)
@@ -215,6 +216,7 @@ void app_pt_gpio_txwakeup_process(void)
 			}break;
 			case PT_CONN_EMPTY:
 			{
+				//QPRINTF("I'm comming!\r\n");
 				pt_uart_rx_start();
 				
 			}break;
@@ -247,6 +249,7 @@ void app_event_gpio_stchange_handler(void)
 #if (defined (CFG_PT_BOTTON))
 	ke_timer_set(APP_SYS_GPIO_STCHANGE_TIMER, TASK_APP, 2);
 #else
+	QPRINTF("even\r\n");
 	app_pt_gpio_stchange_process();
 #endif
 }

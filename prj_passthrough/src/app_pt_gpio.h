@@ -40,8 +40,8 @@
 #define PT_WAKEUP	(GPIO_P03)		  	//This pin is used to wakeup MCU to sent data.
   
 
-#define EVENT_GPIO_STCHANGE_ID     7
-#define EVENT_GPIO_TXWAKEUP_ID     8
+#define EVENT_GPIO_STCHANGE_ID     1
+#define EVENT_GPIO_TXWAKEUP_ID     2
 
 
 

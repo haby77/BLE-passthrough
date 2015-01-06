@@ -263,6 +263,8 @@
     #define QN_HCI_UART_WR              NULL
 #endif
 
+#define	QN_COM_UART									CFG_COM_UART
+
 /// Application role definitions
 #define BLE_BROADCASTER             (defined(CFG_BROADCASTER) || defined(CFG_PERIPHERAL) || defined(CFG_ALLROLES))
 #define BLE_OBSERVER                (defined(CFG_OBSERVER) || defined(CFG_CENTRAL) || defined(CFG_ALLROLES))

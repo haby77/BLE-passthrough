@@ -225,6 +225,12 @@ int app_gap_adv_intv_update_timer_handler(ke_msg_id_t const msgid, void const *p
  */
 void usr_sleep_restore(void)
 {
+#if	defined(QN_COM_UART)
+		uart_init(QN_COM_UART, USARTx_CLK(0), UART_9600);
+    uart_tx_enable(QN_COM_UART, MASK_ENABLE);
+    uart_rx_enable(QN_COM_UART, MASK_ENABLE);	
+#endif
+	
 #if QN_DBG_PRINT
     uart_init(QN_DEBUG_UART, USARTx_CLK(0), UART_9600);
     uart_tx_enable(QN_DEBUG_UART, MASK_ENABLE);
@@ -263,7 +269,6 @@ void gpio_interrupt_callback(enum gpio_pin pin)
 //				}break;
         case PT_WAKEUP:
 				{
-            gpio_write_pin(LED1_PIN,GPIO_LOW);
 						usr_button1_cb();
 						//gpio_txwakeup_cb();
 					
@@ -292,8 +297,10 @@ void gpio_interrupt_callback(enum gpio_pin pin)
 void usr_init(void)
 {
 	
-	 task_usr_desc_register();  
+	  task_usr_desc_register();  
     ke_state_set(TASK_USR, USR_DISABLE);
+	
+		pt_gpio_init();
 	
 	if(KE_EVENT_OK != ke_evt_callback_set(EVENT_BUTTON1_PRESS_ID,
                                             app_event_button1_press_handler))

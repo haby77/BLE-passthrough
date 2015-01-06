@@ -30,7 +30,7 @@ enum pt_st
 };
 
 
-#define PT_FRAME_TIMEOUT 2 //2*10ms
+#define PT_FRAME_TIMEOUT 4 //2*10ms
 
 #define EVENT_UART_TX_ID 3
 #define EVENT_UART_RX_FRAME_ID 4

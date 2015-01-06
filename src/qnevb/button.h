@@ -19,7 +19,7 @@
  ****************************************************************************************
  */
 #define BUTTON1_PIN    (GPIO_P03)
-#define BUTTON2_PIN    (GPIO_P15)
+#define BUTTON2_PIN    (GPIO_P02)
 
 
 /*

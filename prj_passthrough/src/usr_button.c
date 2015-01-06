@@ -76,7 +76,9 @@ void usr_button1_cb(void)
     // We can set a soft timer to debounce.
     // After wakeup BLE, the timer is not calibrated immediately and it is not precise.
     // So We set a event, in the event handle, set the soft timer.
+		
     ke_evt_set(1UL << EVENT_BUTTON1_PRESS_ID);
+		ke_evt_set(1UL << EVENT_GPIO_TXWAKEUP_ID);
 }
 
 int usr_key_scan_timer_handler(ke_msg_id_t const msgid, void const *param,

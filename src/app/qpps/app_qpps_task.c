@@ -241,9 +241,13 @@ int app_qpps_data_ind_handler(ke_msg_id_t const msgid,
                               ke_task_id_t const dest_id,
                               ke_task_id_t const src_id)
 {
+		uint8_t i;
     if (param->length > 0)
     {
         QPRINTF("len=%d, I%02X", param->length, param->data[0]);
+				QPRINTF("\r\n");
+				for(i=0;i<param->length;i++)
+					QPRINTF("  0x%02X",param->data[i]);
 				app_task_msg_hdl(msgid, param);
 	
         ///leo add

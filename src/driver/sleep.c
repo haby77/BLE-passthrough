@@ -120,6 +120,26 @@ int usr_sleep(void)
         return PM_ACTIVE;    // If CLOCK OFF & POWER DOWN is disabled, return immediately
     }
 #endif
+		
+#if	QN_COM
+		if((GPIO_LOW == gpio_read_pin(QN_EACI_GPIO_WAKEUP_QN_MCU))  // Check external wakeup source
+        || (eaci_env.tx_state!=EACI_STATE_TX_IDLE)              // Check EACI UART TX status
+        || (eaci_env.rx_state!=EACI_STATE_RX_START))            // Check EACI UART RX status
+    {
+        rt = PM_IDLE;
+    }
+
+    int tx_st = uart_check_tx_free(QN_COM_UART);
+
+    if((rt >= PM_SLEEP) && (tx_st == UART_TX_BUF_BUSY))
+    {
+        rt = PM_IDLE;
+    }
+    else if(tx_st == UART_LAST_BYTE_ONGOING)
+    {
+        return PM_ACTIVE;    // If CLOCK OFF & POWER DOWN is disabled, return immediately
+    }
+#endif
 
     return rt;
 }

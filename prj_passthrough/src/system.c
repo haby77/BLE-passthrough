@@ -47,7 +47,7 @@ static void SystemIOCfg(void)
                              | P06_SW_DAT_PIN_CTRL
                              | P07_SW_CLK_PIN_CTRL
 
-#if defined(CFG_DEBUG_UART)
+#if (defined(CFG_COM_UART))
 														 | P10_UART1_RXD_PIN_CTRL
 														 | P11_UART1_TXD_PIN_CTRL
 #else
@@ -163,6 +163,12 @@ void SystemInit(void)
 	//leo add		
 	if(gpio_read_pin(QN_TEST_CTRL_PIN) == GPIO_HIGH)					//
 	{
+#endif
+		
+#if	defined(QN_COM_UART)
+		uart_init(QN_COM_UART, USARTx_CLK(0), UART_9600);
+    uart_tx_enable(QN_COM_UART, MASK_ENABLE);
+    uart_rx_enable(QN_COM_UART, MASK_ENABLE);	
 #endif
 
 #if (defined(QN_PT))

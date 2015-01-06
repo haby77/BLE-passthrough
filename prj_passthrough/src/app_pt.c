@@ -79,10 +79,10 @@ void app_pt_task_msg_hdl(ke_msg_id_t const msgid, void const *param)
         {
             uint8_t bit_num = get_bit_num(app_qpps_env->char_status);
             if (bit_num >= QPPS_VAL_CHAR_NUM)  
-            {                
-                pt_uart_rx_start();
+            {                  
                 pt_env.pt_state = PT_CONN_EMPTY;
                 pt_state_set(PT_CONN_EMPTY);
+								pt_uart_rx_start();
             }
 			else
 			{
@@ -100,6 +100,8 @@ void app_pt_task_msg_hdl(ke_msg_id_t const msgid, void const *param)
 				pt_env.pt_state = PT_CONN_EMPTY;
 				pt_state_set(PT_CONN_EMPTY);
 			}
+			//								ke_evt_set(1UL << EVENT_GPIO_TXWAKEUP_ID);
+
 		}break;
 		case GAP_DISCON_CMP_EVT://after disconnect with the equipment,the module will advertising auto.
 		{
@@ -107,7 +109,7 @@ void app_pt_task_msg_hdl(ke_msg_id_t const msgid, void const *param)
 			ke_evt_clear(1UL << EVENT_UART_RX_FRAME_ID);
 			ke_evt_clear(1UL << EVENT_UART_RX_TIMEOUT_ID);
 			ke_timer_clear(APP_PT_RX_TIMEOUT_TIMER, TASK_APP);
-			uart_rx_int_enable(QN_UART0, MASK_DISABLE);  //disable uart rx interrupt 
+			uart_rx_int_enable(QN_HCI_UART, MASK_DISABLE);  //disable uart rx interrupt 
 			
 //			pt_env.pt_state = PT_DEEPSLEEP;
 //			pt_state_set(PT_DEEPSLEEP);
@@ -125,18 +127,20 @@ void app_pt_task_msg_hdl(ke_msg_id_t const msgid, void const *param)
 
 void pt_uart_rx_start(void)
 {
+		//QPRINTF("pt_uart_rx_start\r\n");
     pt_env.pt_rx_len = 0;
-    uart_read(QN_HCI_UART, &pt_env.pt_rx_buf[pt_env.pt_rx_len], 1, pt_uart_rx);
+    uart_read(QN_COM_UART, &pt_env.pt_rx_buf[pt_env.pt_rx_len], 1, pt_uart_rx);
 }
 
  
 void pt_uart_rx(void)
 {
     pt_env.pt_rx_len++;
-    
+    //QPRINTF("pt_env.pt_rx_len %d\r\n",pt_env.pt_rx_len);
     //set pt gpio state 
+		if (pt_env.pt_rx_buf[0] == 0x02 )
     pt_env.pt_state = PT_CONN_FULL;
-	pt_state_set(PT_CONN_FULL);
+		pt_state_set(PT_CONN_FULL);
 		
     if(pt_env.pt_rx_len==QPPS_VAL_CHAR_NUM*QPP_DATA_MAX_LEN)  //receive data buf is full, should sent them to ble
     {
@@ -150,8 +154,8 @@ void pt_uart_rx(void)
     }
     else
     {
-		ke_evt_set(1UL << EVENT_UART_RX_TIMEOUT_ID);
-        	uart_read(QN_HCI_UART, &pt_env.pt_rx_buf[pt_env.pt_rx_len], 1, pt_uart_rx);
+					ke_evt_set(1UL << EVENT_UART_RX_TIMEOUT_ID);
+        	uart_read(QN_COM_UART, &pt_env.pt_rx_buf[pt_env.pt_rx_len], 1, pt_uart_rx);
     }
 }
 
@@ -180,7 +184,7 @@ void pt_event_uart_rx_timeout_handler(void)
 int app_pt_rx_timeout_handler(ke_msg_id_t const msgid, void const *param,
                                ke_task_id_t const dest_id, ke_task_id_t const src_id)
 {
-    uart_rx_int_enable(QN_UART0, MASK_DISABLE);  //disable uart rx interrupt 
+    uart_rx_int_enable(QN_HCI_UART, MASK_DISABLE);  //disable uart rx interrupt 
     struct app_uart_data_ind *pt_data = ke_msg_alloc(APP_PT_UART_RX_DONE_IND,
                                  TASK_APP,
                                  TASK_APP,
@@ -256,7 +260,8 @@ void pt_uart_write(struct ke_msg *msg)
     //go to start tx state
     pt_env.tx_state = PT_UART_TX_ONGOING;
 
-    uart_write(QN_HCI_UART, ((uint8_t *)&msg->param), msg->param_len, app_event_pt_tx_handler);
+    uart_write(QN_COM_UART, ((uint8_t *)&msg->param), msg->param_len, app_event_pt_tx_handler);
+		delay(0x2fff);
 }
 
 // Push msg into eaci tx queue

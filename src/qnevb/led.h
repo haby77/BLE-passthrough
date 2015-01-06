@@ -20,10 +20,10 @@
  ****************************************************************************************
  */
 #define LED1_PIN    (GPIO_P26)
-#define LED2_PIN    (GPIO_P04)
-#define LED3_PIN    (GPIO_P03)
+#define LED2_PIN    (GPIO_P02)
+#define LED3_PIN    (GPIO_P02)
 #define LED4_PIN    (GPIO_P02)
-#define LED5_PIN    (GPIO_P01)
+#define LED5_PIN    (GPIO_P02)
 
 /*
  * ENUMERATION DEFINITIONS
